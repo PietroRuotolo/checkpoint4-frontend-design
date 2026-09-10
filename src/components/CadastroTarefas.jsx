@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useEffect } from "react";
 import { PRIORIDADES } from "../prioridades";
 
 function formatarData(iso) {
@@ -8,6 +9,9 @@ function formatarData(iso) {
 }
 
 function corPrioridade(valor) {
+    
+    // MÉTODO DE ARRAY find: percorre PRIORIDADES e retorna o primeiro item
+    // cujo "valor" seja igual ao parâmetro recebido (ou undefined se não achar).
     const p = PRIORIDADES.find((p) => p.valor === valor);
     return p ? p.cor : "#78716c";
 }
@@ -15,9 +19,17 @@ function corPrioridade(valor) {
 let proximoId = 1;
 
 export default function CadastroTarefas() {
+    
+    // HOOK useState: cria uma variável de estado ("tarefas") e a função para atualizá-la ("setTarefas").
+    // Sempre que setTarefas for chamado, o React re-renderiza o componente com o novo valor.
     const [tarefas, setTarefas] = useState([]);
+    
+    // HOOK useState: guarda a mensagem de erro de validação do formulário.
     const [erro, setErro] = useState("");
+    // HOOK useState: guarda qual filtro está ativo (TODAS, PENDENTES ou CONCLUIDAS).
     const [filtro, setFiltro] = useState("TODAS");
+    
+    // HOOK useState: guarda os valores digitados no formulário (nome, data, descrição, prioridade).
     const [form, setForm] = useState({
         nome: "",
         data: "",
@@ -25,6 +37,48 @@ export default function CadastroTarefas() {
         prioridade: "BAIXA",
     });
 
+    // HOOK useState: controla se o carregamento inicial do localStorage já terminou,
+    // evitando que o efeito de salvar rode antes da hora.
+    const [carregado, setCarregado] = useState(false);
+
+
+    // HOOK useEffect (executa só uma vez, por causa do array [] no final):
+    // roda assim que o componente é montado na tela e serve para CARREGAR
+    // as tarefas salvas anteriormente no localStorage.
+    useEffect(() => {
+        try {
+            const salvo = localStorage.getItem("cadastro-tarefas:tarefas");
+            if (salvo) {
+                const dados = JSON.parse(salvo);
+                if (Array.isArray(dados)) {
+                    setTarefas(dados);
+
+                    // MÉTODO DE ARRAY reduce: percorre as tarefas salvas e vai guardando
+                    // o maior "id" encontrado, começando de 0. Serve para continuar a
+                    // contagem de ids sem repetir depois de recarregar a página.
+                    const maiorId = dados.reduce((max, t) => Math.max(max, t.id), 0);
+                    proximoId = maiorId + 1;
+                }
+            }
+        } catch (erro) {
+            console.error("Não foi possível carregar as tarefas salvas:", erro);
+        }
+        setCarregado(true);
+    }, []);
+
+    // HOOK useEffect (executa sempre que "tarefas" ou "carregado" mudarem):
+    // roda para SALVAR a lista de tarefas atualizada no localStorage.
+    useEffect(() => {
+        if (!carregado) return;
+        try {
+            localStorage.setItem("cadastro-tarefas:tarefas", JSON.stringify(tarefas));
+        } catch (erro) {
+            console.error("Não foi possível salvar as tarefas:", erro);
+        }
+    }, [tarefas, carregado]);
+
+    // CALLBACK: esta função é passada para o atributo onSubmit do <form> mais abaixo.
+    // O React a chama automaticamente quando o formulário é enviado.
     function handleSubmit(e) {
         e.preventDefault();
         if (!form.nome) {
@@ -36,21 +90,31 @@ export default function CadastroTarefas() {
             return;
         }
 
+        // CALLBACK: a função (prev) => [...] é passada para setTarefas.
+        // O React executa ela com o valor mais atual do estado ("prev") e usa
+        // o retorno como o novo estado — evita usar um valor de "tarefas" desatualizado.
         setTarefas((prev) => [...prev, { id: proximoId++, concluida: false, ...form }]);
         setForm({ nome: "", data: "", descricao: "", prioridade: "BAIXA" });
         setErro("");
     }
 
+
+    // MÉTODO DE ARRAY map: cria uma NOVA lista com o mesmo tamanho da original,
+    // trocando apenas a tarefa cujo id bate com o recebido (inverte "concluida").
     function alternarConcluida(id) {
         setTarefas((prev) =>
             prev.map((t) => (t.id === id ? { ...t, concluida: !t.concluida } : t))
         );
     }
 
+    // MÉTODO DE ARRAY filter: cria uma NOVA lista contendo só as tarefas
+    // cujo id é DIFERENTE do recebido — ou seja, remove a tarefa escolhida.
     function excluirTarefa(id) {
         setTarefas((prev) => prev.filter((t) => t.id !== id));
     }
 
+    // MÉTODO DE ARRAY filter: percorre todas as tarefas e mantém só as que
+    // combinam com o filtro selecionado (Todas / Pendentes / Concluídas).
     const tarefasFiltradas = tarefas.filter((tarefa) => {
         if (filtro === "PENDENTES") return !tarefa.concluida;
         if (filtro === "CONCLUIDAS") return tarefa.concluida;
@@ -75,6 +139,8 @@ export default function CadastroTarefas() {
                             <label className="mb-1.5 block text-xs font-semibold text-stone-500">
                                 Nome
                             </label>
+
+                            {/* CALLBACK: função executada pelo React a cada tecla digitada (onChange) */}
                             <input
                                 type="text"
                                 value={form.nome}
@@ -121,6 +187,8 @@ export default function CadastroTarefas() {
                                     <button
                                         type="button"
                                         key={p.valor}
+
+                                        /* CALLBACK: função chamada pelo React quando o botão é clicado (onClick) */
                                         onClick={() => setForm({ ...form, prioridade: p.valor })}
                                         style={
                                             ativo
@@ -225,6 +293,7 @@ export default function CadastroTarefas() {
                                     <div className="flex shrink-0 items-center gap-1.5">
                                         <button
                                             type="button"
+                                        /* CALLBACK: onClick chama alternarConcluida passando o id desta tarefa */
                                             onClick={() => alternarConcluida(t.id)}
                                             title={t.concluida ? "Marcar como pendente" : "Marcar como concluída"}
                                             className={
@@ -245,6 +314,9 @@ export default function CadastroTarefas() {
                                         </button>
                                         <button
                                             type="button"
+
+                                        /* CALLBACK: onClick chama excluirTarefa passando o id desta tarefa */
+
                                             onClick={() => excluirTarefa(t.id)}
                                             title="Excluir tarefa"
                                             className="flex h-8 w-8 items-center justify-center rounded-lg border border-stone-200 text-stone-400 transition-colors hover:border-red-300 hover:text-red-600"
